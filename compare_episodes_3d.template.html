@@ -1,0 +1,1247 @@
+<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Trajectory comparison</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --fg: #1a1a1a;
+      --muted: #5a5a5a;
+      --panel: rgba(255, 255, 255, .96);
+      --border: #bdbdbd;
+      --blue: #1f78b4;
+      --red: #cb181d;
+      --orange: #d2691e;
+      --link: #b9bec5;
+      --accent: #7a3de0;
+      --hover: rgba(128, 128, 128, .18);
+      --ref1: #a6cee3;
+      --ref2: #1f78b4;
+      --run1: #fcae91;
+      --run2: #cb181d
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #14161a;
+        --fg: #ececec;
+        --muted: #a9adb3;
+        --panel: rgba(30, 33, 39, .97);
+        --border: #4a4f57;
+        --blue: #6fb3e8;
+        --red: #ff7b72;
+        --orange: #ffa04d;
+        --link: #59606a;
+        --accent: #b79bff
+      }
+    }
+
+    html,
+    body {
+      margin: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--fg);
+      font-family: system-ui, -apple-system, Segoe UI, sans-serif
+    }
+
+    #plotwrap {
+      position: fixed;
+      inset: 0
+    }
+
+    .panel {
+      position: fixed;
+      z-index: 10;
+      box-sizing: border-box;
+      background: var(--panel);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+      line-height: 1.45;
+      box-shadow: 0 2px 12px rgba(0, 0, 0, .3);
+      scrollbar-width: thin;
+      scrollbar-color: var(--muted) transparent
+    }
+
+    .panel code {
+      background: rgba(128, 128, 128, .22);
+      color: var(--fg);
+      padding: 0 3px;
+      border-radius: 3px;
+      font-size: 11px;
+      word-break: break-all
+    }
+
+    .panel .muted {
+      color: var(--muted)
+    }
+
+    .panel button,
+    .panel select,
+    .panel input {
+      font: inherit;
+      font-size: 11px;
+      color: var(--fg);
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 5px;
+      padding: 2px 7px;
+      cursor: pointer
+    }
+
+    .panel button:hover {
+      background: var(--hover)
+    }
+
+    .panel input {
+      cursor: text;
+      width: 100%;
+      box-sizing: border-box
+    }
+
+    #rotbar {
+      left: 12px;
+      top: 12px;
+      padding: 5px 7px;
+      display: flex;
+      gap: 6px;
+      align-items: center
+    }
+
+    #rotbar button.on {
+      background: var(--accent);
+      color: var(--bg);
+      border-color: var(--accent)
+    }
+
+    /* explanation panel (bottom-left) */
+    /* right column: Lines panel on top, Key / More info underneath; stops above the video window */
+    #rightcol {
+      position: fixed;
+      z-index: 10;
+      right: 12px;
+      top: 46px;
+      bottom: calc(var(--vidh, 0px) + 12px);
+      width: min(300px, calc(100vw - 24px));
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none
+    }
+
+    #rightcol .panel {
+      position: static;
+      pointer-events: auto
+    }
+
+    #info {
+      flex: 0 1 auto;
+      max-height: 60%;
+      overflow: auto;
+      padding: 8px 10px
+    }
+
+    #info summary {
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px
+    }
+
+    #info h4 {
+      margin: 10px 0 3px;
+      font-size: 12px
+    }
+
+    #info p {
+      margin: 6px 0
+    }
+
+    #info ul {
+      margin: 2px 0;
+      padding-left: 16px
+    }
+
+    #info li {
+      margin: 2px 0
+    }
+
+    #more {
+      margin-top: 6px;
+      border-top: 1px solid var(--border);
+      padding-top: 6px
+    }
+
+    #more>summary {
+      font-size: 12px
+    }
+
+    .key>div {
+      margin: 5px 0
+    }
+
+    .bar {
+      display: inline-block;
+      width: 46px;
+      height: 8px;
+      border-radius: 4px;
+      vertical-align: middle;
+      margin-right: 4px
+    }
+
+    .bar-ref {
+      background: linear-gradient(90deg, var(--ref1), var(--ref2))
+    }
+
+    .bar-run {
+      background: linear-gradient(90deg, var(--run1), var(--run2))
+    }
+
+    .dot {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      vertical-align: middle;
+      border: 1px solid #888;
+      margin-right: 3px
+    }
+
+    .dot-start {
+      background: #2ecc71
+    }
+
+    .dot-end {
+      background: #ff8c00
+    }
+
+    #info table {
+      border-collapse: collapse;
+      width: 100%;
+      font-size: 11px
+    }
+
+    #info td,
+    #info th {
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      text-align: right
+    }
+
+    #info th:first-child,
+    #info td:first-child {
+      text-align: left
+    }
+
+    svg.arm {
+      width: 100%;
+      height: auto;
+      display: block;
+      margin: 4px 0
+    }
+
+    svg.arm .linkfill {
+      fill: var(--link)
+    }
+
+    svg.arm .linkline {
+      stroke: var(--link);
+      stroke-width: 7;
+      stroke-linecap: round;
+      fill: none
+    }
+
+    svg.arm .j {
+      stroke-width: 2
+    }
+
+    svg.arm .j.off {
+      fill: var(--bg);
+      stroke: var(--muted)
+    }
+
+    svg.arm .j.on {
+      fill: var(--accent);
+      stroke: var(--accent)
+    }
+
+    svg.arm .rot {
+      fill: none;
+      stroke: var(--muted);
+      stroke-dasharray: 3 2;
+      opacity: .6
+    }
+
+    svg.arm .rot.on {
+      stroke: var(--accent);
+      opacity: 1
+    }
+
+    svg.arm .lab {
+      font-size: 10px;
+      fill: var(--fg)
+    }
+
+    svg.arm .lab.off {
+      fill: var(--muted)
+    }
+
+    svg.arm .lab.on {
+      font-weight: 700
+    }
+
+    svg.arm .tag {
+      fill: var(--accent);
+      font-weight: 700
+    }
+
+    svg.arm .tip {
+      fill: var(--orange);
+      stroke: var(--fg);
+      stroke-width: .8
+    }
+
+    svg.arm .tiplab {
+      fill: var(--orange);
+      font-weight: 700
+    }
+
+    svg.arm .lead {
+      stroke: var(--orange);
+      stroke-width: 1.2
+    }
+
+    svg.arm .zax {
+      stroke: var(--fg);
+      stroke-width: 1.5
+    }
+
+    svg.arm .zhead {
+      fill: var(--fg)
+    }
+
+    /* lines panel (top-right); leaves room for the video window when there is one */
+    #legend {
+      flex: 1 1 auto;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      padding: 8px 10px
+    }
+
+    #legend.collapsed {
+      flex: 0 0 auto
+    }
+
+    #lg-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px
+    }
+
+    #lg-body {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      margin-top: 6px
+    }
+
+    #legend.collapsed #lg-body {
+      display: none
+    }
+
+    .lg-tools {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+      margin-bottom: 6px
+    }
+
+    .lg-range {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      margin-bottom: 6px
+    }
+
+    .lg-range .row {
+      display: flex;
+      gap: 4px
+    }
+
+    #lg-msg {
+      min-height: 14px
+    }
+
+    #lg-list {
+      overflow-y: auto;
+      min-height: 60px;
+      flex: 1;
+      border-top: 1px solid var(--border);
+      padding-top: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--muted) transparent
+    }
+
+    #lg-list::-webkit-scrollbar {
+      width: 8px
+    }
+
+    #lg-list::-webkit-scrollbar-thumb {
+      background: var(--muted);
+      border-radius: 4px
+    }
+
+    .lg-group {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 6px 0 2px;
+      font-weight: 600
+    }
+
+    .lg-group button {
+      padding: 0 5px;
+      margin-left: 3px
+    }
+
+    .lg-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 1px 4px;
+      border-radius: 4px;
+      cursor: pointer;
+      user-select: none
+    }
+
+    .lg-row:hover {
+      background: var(--hover)
+    }
+
+    .lg-row.off {
+      opacity: .4
+    }
+
+    .lg-row .cb {
+      width: 12px;
+      height: 12px;
+      border: 1px solid var(--muted);
+      border-radius: 3px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 10px;
+      line-height: 1
+    }
+
+    .lg-row .sw {
+      width: 16px;
+      height: 4px;
+      border-radius: 2px
+    }
+
+    .sw-ref {
+      background: linear-gradient(90deg, var(--ref1), var(--ref2))
+    }
+
+    .sw-run {
+      background: linear-gradient(90deg, var(--run1), var(--run2))
+    }
+
+    /* episode video window (bottom-right) */
+    #vidpanel {
+      right: 12px;
+      bottom: 12px;
+      width: var(--vw, 320px);
+      max-width: calc(100vw - 24px);
+      padding: 8px 10px
+    }
+
+    #vp-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px
+    }
+
+    #vp-head .vp-right {
+      display: flex;
+      align-items: center;
+      gap: 8px
+    }
+
+    #vp-body {
+      margin-top: 6px
+    }
+
+    #vidpanel.collapsed #vp-body {
+      display: none
+    }
+
+    .vp-pick {
+      display: flex;
+      gap: 4px;
+      margin-bottom: 6px
+    }
+
+    .vp-pick select {
+      flex: 1;
+      min-width: 0
+    }
+
+    .vp-stage {
+      background: #000;
+      border-radius: 4px;
+      overflow: hidden;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      justify-content: center
+    }
+
+    .vp-stage video {
+      width: 100%;
+      max-height: 48vh;
+      display: block;
+      object-fit: contain
+    }
+
+    .vp-stage #vp-empty {
+      padding: 14px 10px;
+      text-align: center
+    }
+
+    .vp-ctl {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 6px
+    }
+
+    .vp-ctl button {
+      min-width: 26px;
+      padding: 2px 4px
+    }
+
+    #vidpanel .vp-ctl input[type=range] {
+      flex: 1;
+      width: auto;
+      padding: 0;
+      cursor: pointer
+    }
+
+    #vidpanel label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 4px;
+      cursor: pointer
+    }
+
+    #vidpanel input[type=checkbox] {
+      width: auto;
+      margin: 0
+    }
+
+    #vp-time {
+      white-space: nowrap;
+      font-variant-numeric: tabular-nums
+    }
+
+    #vp-err {
+      margin-top: 4px;
+      color: var(--red)
+    }
+
+    /* joints-over-time graph (bottom-center); sits between the info panel and the video window */
+    #jpanel {
+      left: 12px;
+      right: calc(max(var(--vidw, 0px), 312px) + 12px);
+      bottom: 12px;
+      padding: 8px 10px
+    }
+
+    #jp-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      font-weight: 600;
+      font-size: 13px
+    }
+
+    #jp-head .jp-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 400
+    }
+
+    #jpanel label {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      cursor: pointer;
+      white-space: nowrap
+    }
+
+    #jpanel input[type=checkbox] {
+      width: auto;
+      margin: 0
+    }
+
+    #jp-body {
+      margin-top: 6px
+    }
+
+    #jpanel.collapsed #jp-body {
+      display: none
+    }
+
+    #jp-plot {
+      width: 100%;
+      height: clamp(260px, 44vh, 480px)
+    }
+
+    #jp-warn {
+      display: none;
+      margin-top: 4px;
+      color: var(--orange);
+      font-weight: 600
+    }
+
+    #jp-empty {
+      padding: 14px 10px;
+      text-align: center
+    }
+  </style>
+</head>
+
+<body>
+  <div id="plotwrap">__PLOT__</div>
+
+  <div id="rotbar" class="panel">
+    <button id="rot-btn" title="Slowly rotate the plot around its vertical axis">&#10227; Rotate</button>
+    <select id="rot-speed" title="Rotation speed">
+      <option value="4">0.5&times;</option>
+      <option value="8" selected>1&times;</option>
+      <option value="16">2&times;</option>
+    </select>
+  </div>
+
+  <div id="rightcol">
+  <div id="legend" class="panel">
+    <div id="lg-head"><span>Lines <span class="muted" id="lg-count"></span></span><span class="muted"
+        id="lg-toggle">&minus;</span></div>
+    <div id="lg-body">
+      <div class="lg-tools">
+        <button data-act="all">Show all</button><button data-act="none">Hide all</button>
+        <button data-act="ref">Ref only</button><button data-act="run">Rollout only</button>
+      </div>
+      <div class="lg-range">
+        <input id="lg-input" placeholder="episodes: 0-9, 15, 20-, 0-20:2" spellcheck="false">
+        <div class="row">
+          <select id="lg-scope">
+            <option value="both">both</option>
+            <option value="ref">ref</option>
+            <option value="run">rollout</option>
+          </select>
+          <button data-rng="show">Show</button><button data-rng="hide">Hide</button><button
+            data-rng="only">Only</button>
+        </div>
+        <div id="lg-msg" class="muted"></div>
+      </div>
+      <div id="lg-list"></div>
+    </div>
+  </div>
+  <details id="info" class="panel" open>__INFO__</details>
+  </div>
+  <!-- video-panel:start -->
+  <div id="vidpanel" class="panel">
+    <div id="vp-head">
+      <span>Episode video <span class="muted" id="vp-title"></span></span>
+      <span class="vp-right"><select id="vp-size" title="Window size">
+          <option value="240">S</option>
+          <option value="320" selected>M</option>
+          <option value="480">L</option>
+        </select><span class="muted" id="vp-toggle">&minus;</span></span>
+    </div>
+    <div id="vp-body">
+      <div class="vp-pick"><select id="vp-group"></select><select id="vp-ep"></select></div>
+      <div class="vp-stage">
+        <video id="vp-video" muted playsinline preload="metadata" style="display:none"></video>
+        <div id="vp-empty" class="muted">Pick an episode above, or click a line in the plot.</div>
+      </div>
+      <div class="vp-ctl">
+        <button id="vp-play" title="Play / pause">&#9654;</button>
+        <input type="range" id="vp-seek" min="0" max="1000" value="0" step="1">
+        <span id="vp-time" class="muted">0.0 / 0.0 s</span>
+      </div>
+      <label class="muted"><input type="checkbox" id="vp-loop"> loop episode</label>
+      <div id="vp-err" class="muted"></div>
+    </div>
+  </div>
+  <!-- video-panel:end -->
+
+  <!-- joint-panel:start -->
+  <div id="jpanel" class="panel">
+    <div id="jp-head">
+      <span>Joints over time <span class="muted" id="jp-title"></span></span>
+      <span class="jp-right">
+        <label class="muted" title="Keep earlier clicks on the graph and draw new ones on top"><input type="checkbox"
+            id="jp-overlay"> overlay mode</label>
+        <button id="jp-clear" title="Remove everything from the graph">Clear</button>
+        <span class="muted" id="jp-toggle" title="Hide / show">&minus;</span>
+      </span>
+    </div>
+    <div id="jp-body">
+      <div id="jp-warn"></div>
+      <div id="jp-empty" class="muted">Click a line in the 3D plot to graph its joints here.</div>
+      <div id="jp-plot" style="display:none"></div>
+    </div>
+  </div>
+  <!-- joint-panel:end -->
+
+  <script>
+    var EPS = __EPS__;
+    var FPS = __FPS__;
+    var JNAMES = __JNAMES__;
+  </script>
+  <script>
+    /* Page logic for the HTML written by compare_episodes_3d.py.
+     *
+     * This file is read by the Python script and pasted into the generated HTML, so the output stays a
+     * single self-contained file. It expects two globals that the Python script defines in an earlier
+     * <script> tag:
+     *   EPS - one entry per episode: {group, ep, traces, video}
+     *   FPS - dataset frames per second
+     *   JNAMES - names of the joints selected with --joints ([] when not used)
+     * Keep this file ASCII-only (the Python script writes the HTML with the default encoding).
+     */
+    (function () {
+      var gd = document.getElementById("plot");
+
+      /* ---------- theme ---------- */
+      var mq = window.matchMedia("(prefers-color-scheme: dark)");
+      function theme() {
+        var d = mq.matches, fg = d ? "#ececec" : "#1a1a1a", bg = d ? "#14161a" : "#ffffff";
+        var grid = d ? "#3c424b" : "#d4d4d4", pane = d ? "#1b1e23" : "#f1f1f1";
+        if (!gd || !window.Plotly) return;
+        var u = { "paper_bgcolor": bg, "font.color": fg, "scene.bgcolor": bg };
+        ["x", "y", "z"].forEach(function (a) {
+          u["scene." + a + "axis.gridcolor"] = grid; u["scene." + a + "axis.zerolinecolor"] = grid;
+          u["scene." + a + "axis.linecolor"] = grid; u["scene." + a + "axis.showbackground"] = true;
+          u["scene." + a + "axis.backgroundcolor"] = pane; u["scene." + a + "axis.color"] = fg;
+        });
+        Plotly.relayout(gd, u);
+      }
+      if (mq.addEventListener) mq.addEventListener("change", theme); else mq.addListener(theme);
+      window.addEventListener("load", theme);
+
+      /* ---------- horizontal-only rotation ---------- */
+      var rot = { on: false, last: 0, cam: null };
+      var rotBtn = document.getElementById("rot-btn");
+      var rotSpeed = document.getElementById("rot-speed");
+      var lastCam = null;   /* most recent camera Plotly reported after a user drag */
+      function okVec(v) { return v && isFinite(v.x) && isFinite(v.y) && isFinite(v.z); }
+      function cloneCam(s) {
+        return {
+          eye: { x: s.eye.x, y: s.eye.y, z: s.eye.z },
+          center: { x: s.center.x, y: s.center.y, z: s.center.z },
+          up: { x: s.up.x, y: s.up.y, z: s.up.z }
+        };
+      }
+      if (gd.on) gd.on("plotly_relayout", function (ev) {
+        var c = ev && ev["scene.camera"];
+        if (c && okVec(c.eye) && okVec(c.center) && okVec(c.up)) lastCam = cloneCam(c);
+      });
+      function readCamera() {
+        /* 1) the live camera inside the 3D scene (what you actually see right now) */
+        try {
+          var sc = gd._fullLayout.scene._scene;
+          var live = sc && sc.getCamera && sc.getCamera();
+          if (live && okVec(live.eye) && okVec(live.center) && okVec(live.up)) return cloneCam(live);
+        } catch (err) { }
+        /* 2) the last camera Plotly reported through a relayout event */
+        if (lastCam) return cloneCam(lastCam);
+        /* 3) the layout camera, then Plotly's default view */
+        var s = (gd.layout && gd.layout.scene && gd.layout.scene.camera) || {};
+        return cloneCam({
+          eye: s.eye || { x: 1.25, y: 1.25, z: 1.25 },
+          center: s.center || { x: 0, y: 0, z: 0 },
+          up: s.up || { x: 0, y: 0, z: 1 }
+        });
+      }
+      function rotStep(ts) {
+        if (!rot.on) return;
+        var dt = rot.last ? Math.min((ts - rot.last) / 1000, 0.1) : 0;
+        rot.last = ts;
+        var a = parseFloat(rotSpeed.value) * dt * Math.PI / 180;   /* degrees per second */
+        var c = rot.cam.center, e = rot.cam.eye;
+        var dx = e.x - c.x, dy = e.y - c.y, cs = Math.cos(a), sn = Math.sin(a);
+        /* spin the eye around the vertical (z) axis; height, distance and tilt are unchanged */
+        rot.cam.eye = { x: c.x + dx * cs - dy * sn, y: c.y + dx * sn + dy * cs, z: e.z };
+        if (setCamFast(rot.cam)) { requestAnimationFrame(rotStep); return; }
+        /* fallback (slow with many lines): full Plotly relayout, one redraw at a time, never queued */
+        Plotly.relayout(gd, { "scene.camera": rot.cam }).then(function () {
+          if (rot.on) requestAnimationFrame(rotStep);
+        });
+      }
+      /* Move the camera directly on the WebGL scene, the same way a mouse drag does. This skips Plotly's
+         per-frame re-processing of every trace, so the speed no longer depends on how many lines exist. */
+      function setCamFast(cam) {
+        try {
+          var sc = gd._fullLayout.scene._scene;
+          sc.setCamera(cam);
+          /* keep Plotly's stored camera in sync (no redraw), so a later hide/show or theme change
+             does not snap the view back to where the rotation started */
+          try { gd.layout.scene.camera = cloneCam(cam); gd._fullLayout.scene.camera = cloneCam(cam); } catch (e2) { }
+          return true;
+        } catch (err) { return false; }
+      }
+      function rotStart() {
+        rot.cam = readCamera();      /* start from whatever view the user has set */
+        rot.last = 0; rot.on = true;
+        rotBtn.innerHTML = "&#9632; Stop"; rotBtn.classList.add("on");
+        requestAnimationFrame(rotStep);
+      }
+      function rotStop() {
+        if (!rot.on) return;
+        rot.on = false;
+        rotBtn.innerHTML = "&#10227; Rotate"; rotBtn.classList.remove("on");
+      }
+      rotBtn.addEventListener("click", function () { if (rot.on) rotStop(); else rotStart(); });
+      /* any direct interaction with the plot (drag, scroll, touch, modebar) stops the spin */
+      ["pointerdown", "wheel", "touchstart"].forEach(function (t) {
+        gd.addEventListener(t, rotStop, { passive: true });
+      });
+
+      /* ---------- lines panel ---------- */
+      /* EPS and FPS are globals defined by the Python script (see the header of this file) */
+      var vis = EPS.map(function () { return true; });
+      var jsel = [];            /* episodes (indices into EPS) shown in the joints graph, max 2 */
+      var onTime = null;        /* set by the joints graph: called with the video's time (s) so its yellow line can follow */
+      var onVisChange = null;   /* set by the video block so the frame dot hides with its line */
+      var rows = [];
+      var listEl = document.getElementById("lg-list");
+      var countEl = document.getElementById("lg-count");
+      var msgEl = document.getElementById("lg-msg");
+      var inputEl = document.getElementById("lg-input");
+      var scopeEl = document.getElementById("lg-scope");
+      var titles = { ref: "Reference", run: "Rollout" };
+
+      function render() {
+        var n = 0;
+        vis.forEach(function (v, i) {
+          if (v) n++;
+          rows[i].classList.toggle("off", !v);
+          rows[i].firstChild.textContent = v ? "\u2713" : "";
+        });
+        countEl.textContent = "(" + n + " of " + vis.length + " shown)";
+      }
+      function apply() {
+        var idx = [], v = [];
+        EPS.forEach(function (e, i) { e.traces.forEach(function (t) { idx.push(t); v.push(vis[i]); }); });
+        Plotly.restyle(gd, { visible: v }, idx);
+        render();
+        if (onVisChange) onVisChange();
+      }
+      function setGroup(g, val) { EPS.forEach(function (e, i) { if (e.group === g) vis[i] = val; }); apply(); }
+      function only(pred) { vis = EPS.map(function (e, i) { return pred(e, i); }); apply(); }
+
+      ["ref", "run"].forEach(function (g) {
+        var items = [];
+        EPS.forEach(function (e, i) { if (e.group === g) items.push(i); });
+        if (!items.length) return;
+        var head = document.createElement("div");
+        head.className = "lg-group";
+        head.innerHTML = "<span>" + titles[g] + " (" + items.length + ")</span><span>" +
+          '<button data-g="' + g + '" data-v="1">all</button><button data-g="' + g + '" data-v="0">none</button></span>';
+        head.querySelectorAll("button").forEach(function (b) {
+          b.addEventListener("click", function () { setGroup(b.dataset.g, b.dataset.v === "1"); });
+        });
+        listEl.appendChild(head);
+        items.forEach(function (i) {
+          var e = EPS[i];
+          var row = document.createElement("div");
+          row.className = "lg-row";
+          row.innerHTML = '<span class="cb"></span><span class="sw sw-' + g + '"></span><span>' +
+            (g === "ref" ? "ref" : "run") + " ep" + e.ep + "</span>";
+          row.addEventListener("click", function () { vis[i] = !vis[i]; apply(); });
+          row.addEventListener("dblclick", function () {
+            var isolated = vis.every(function (v, j) { return j === i ? v : !v; });
+            if (isolated) { vis = vis.map(function () { return true; }); } else { vis = vis.map(function (v, j) { return j === i; }); }
+            apply();
+          });
+          rows[i] = row;
+          listEl.appendChild(row);
+        });
+      });
+
+      document.querySelectorAll(".lg-tools button").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var a = b.dataset.act;
+          if (a === "all") only(function () { return true; });
+          else if (a === "none") only(function () { return false; });
+          else only(function (e) { return e.group === a; });
+        });
+      });
+
+      function parseSel(text, maxEp) {
+        text = text.trim();
+        if (!text) return null;
+        var out = {};
+        text.split(",").forEach(function (p) {
+          p = p.trim(); if (!p) return;
+          if (p === "all") { for (var k = 0; k <= maxEp; k++) out[k] = true; return; }
+          var step = 1;
+          if (p.indexOf(":") >= 0) { var s = p.split(":"); p = s[0]; step = parseInt(s[1], 10) || 1; }
+          if (p.indexOf("-") >= 0) {
+            var ab = p.split("-"), a = parseInt(ab[0], 10), b = ab[1] === "" ? maxEp : parseInt(ab[1], 10);
+            for (var k2 = a; k2 <= b; k2 += step) out[k2] = true;
+          } else if (!isNaN(parseInt(p, 10))) out[parseInt(p, 10)] = true;
+        });
+        return out;
+      }
+      document.querySelectorAll("[data-rng]").forEach(function (b) {
+        b.addEventListener("click", function () {
+          var scope = scopeEl.value, action = b.dataset.rng;
+          var cand = [];
+          EPS.forEach(function (e, i) { if (scope === "both" || e.group === scope) cand.push(i); });
+          var maxEp = 0; cand.forEach(function (i) { if (EPS[i].ep > maxEp) maxEp = EPS[i].ep; });
+          var sel = parseSel(inputEl.value, maxEp);
+          var hit = cand.filter(function (i) { return sel === null || sel[EPS[i].ep]; });
+          if (action === "show") hit.forEach(function (i) { vis[i] = true; });
+          else if (action === "hide") hit.forEach(function (i) { vis[i] = false; });
+          else { vis = vis.map(function () { return false; }); hit.forEach(function (i) { vis[i] = true; }); }
+          apply();
+          msgEl.textContent = hit.length + " line(s) matched";
+        });
+      });
+      inputEl.addEventListener("keydown", function (ev) { if (ev.key === "Enter") document.querySelector('[data-rng="show"]').click(); });
+
+      var lg = document.getElementById("legend");
+      document.getElementById("lg-head").addEventListener("click", function () {
+        lg.classList.toggle("collapsed");
+        document.getElementById("lg-toggle").innerHTML = lg.classList.contains("collapsed") ? "+" : "&minus;";
+      });
+
+      /* ---------- episode video window ---------- */
+      /* Only active when the Python script included the video panel HTML (--video_key given and videos
+         found). Without the panel, getElementById returns null and this whole block is skipped. */
+      var vp = document.getElementById("vidpanel");
+      if (vp) {
+        document.body.classList.add("hasvideo");
+        var vid = document.getElementById("vp-video"), playB = document.getElementById("vp-play");
+        var seekEl = document.getElementById("vp-seek"), timeEl = document.getElementById("vp-time");
+        var loopEl = document.getElementById("vp-loop"), grpSel = document.getElementById("vp-group");
+        var epSel = document.getElementById("vp-ep"), titleEl = document.getElementById("vp-title");
+        var emptyEl = document.getElementById("vp-empty"), sizeSel = document.getElementById("vp-size");
+        var errEl = document.getElementById("vp-err"), togEl = document.getElementById("vp-toggle");
+        var withVid = [], groups = [];
+        EPS.forEach(function (e, i) { if (e.video) withVid.push(i); });
+        withVid.forEach(function (i) { if (groups.indexOf(EPS[i].group) < 0) groups.push(EPS[i].group); });
+        var cur = -1, vidSrc = null, pending = null;
+
+        groups.forEach(function (g) {
+          var o = document.createElement("option"); o.value = g; o.textContent = titles[g]; grpSel.appendChild(o);
+        });
+        function fillEps(g) {
+          epSel.innerHTML = ""; epSel.dataset.g = g;
+          withVid.forEach(function (i) {
+            if (EPS[i].group !== g) return;
+            var o = document.createElement("option"); o.value = String(i); o.textContent = "episode " + EPS[i].ep;
+            epSel.appendChild(o);
+          });
+        }
+        function vdur(i) { return EPS[i].video.end - EPS[i].video.start; }
+        function vrel() { return vid.currentTime - EPS[cur].video.start; }
+        function ui() {
+          if (cur < 0) return;
+          var d = vdur(cur), r = Math.max(0, Math.min(d, vrel()));
+          seekEl.value = d ? Math.round(r / d * 1000) : 0;
+          timeEl.textContent = r.toFixed(3) + " / " + d.toFixed(3) + " s";
+          updateDot(r);
+          if (onTime) onTime(r);
+        }
+
+        /* ---------- frame dot: follows the video along its trajectory ---------- */
+        /* One extra 3D marker trace, created on first use. It has a point on the loaded episode's line and,
+           when trajectories are being compared in the joints graph, a point on each of those lines too, all
+           at the same time (the video's current time). Updates are chained (one Plotly call at a time, only
+           the newest position kept) so fast playback never queues up redraws. */
+        var dot = { idx: -1, busy: false, next: null, key: "" };
+        function flushDot() {
+          var n = dot.next; dot.next = null;
+          if (!n) return;
+          dot.busy = true;
+          var done = function () { dot.busy = false; if (dot.next) flushDot(); };
+          var pr;
+          try {
+            if (dot.idx < 0) {
+              dot.idx = gd.data.length;
+              pr = Plotly.addTraces(gd, {
+                type: "scatter3d", mode: "markers", name: "current frame", showlegend: false,
+                x: n.x, y: n.y, z: n.z, visible: n.vis, hoverinfo: "skip",
+                marker: { size: 7, color: "#ffd400", opacity: 1, line: { color: "#111111", width: 2 } }
+              });
+            } else {
+              pr = Plotly.restyle(gd, { x: [n.x], y: [n.y], z: [n.z], visible: n.vis }, [dot.idx]);
+            }
+          } catch (err) { done(); return; }
+          if (pr && pr.then) pr.then(done, done); else done();
+        }
+        function dotEpisodes() {
+          var list = [cur];
+          jsel.forEach(function (i) { if (list.indexOf(i) < 0) list.push(i); });
+          return list.filter(function (i) { return EPS[i] && EPS[i].xyz && vis[i]; });
+        }
+        function updateDot(r) {
+          var list = dotEpisodes(), fr = Math.round(r * FPS), xs = [], ys = [], zs = [], parts = [];
+          list.forEach(function (i) {
+            var pts = EPS[i].xyz, f = Math.max(0, Math.min(pts.length - 1, fr));
+            xs.push(pts[f][0]); ys.push(pts[f][1]); zs.push(pts[f][2]);
+            parts.push(i + ":" + f);
+          });
+          var key = parts.join("|") || "none";
+          if (key === dot.key) return;
+          dot.key = key;
+          dot.next = { x: xs, y: ys, z: zs, vis: list.length > 0 };
+          if (!dot.busy) flushDot();
+        }
+        onVisChange = function () { if (cur >= 0) ui(); };
+
+        function tick() {
+          if (cur < 0 || vid.paused) return;
+          var v = EPS[cur].video;
+          if (vrel() >= vdur(cur) - 0.02) {     /* reached the end of this episode's slice */
+            if (loopEl.checked) vid.currentTime = v.start;
+            else { vid.pause(); vid.currentTime = Math.max(v.start, v.end - 1 / FPS); }
+          }
+          ui();
+          if (!vid.paused) requestAnimationFrame(tick);
+        }
+        function load(i, t) {
+          cur = i;
+          var e = EPS[i], v = e.video;
+          errEl.textContent = "";
+          grpSel.value = e.group;
+          if (epSel.dataset.g !== e.group) fillEps(e.group);
+          epSel.value = String(i);
+          titleEl.textContent = "(" + (e.group === "ref" ? "ref" : "run") + " ep" + e.ep + ")";
+          vp.classList.remove("collapsed"); togEl.innerHTML = "&minus;";
+          emptyEl.style.display = "none"; vid.style.display = "block";
+          var go = function () {
+            vid.currentTime = v.start + Math.min(Math.max(t || 0, 0), vdur(i));
+            ui();
+          };
+          if (vidSrc !== v.url) {               /* different file: load it, then seek */
+            vidSrc = v.url; pending = go; vid.pause(); vid.src = v.url; vid.load();
+          } else go();                          /* same (packed) file: just seek */
+        }
+        vid.addEventListener("loadedmetadata", function () {
+          if (pending) { var f = pending; pending = null; f(); }
+        });
+        vid.addEventListener("error", function () {
+          errEl.textContent = "Could not play this video (file not found, or the browser can't decode its " +
+            "codec). Re-run with --video_mode clips.";
+        });
+        vid.addEventListener("play", function () { playB.innerHTML = "&#10074;&#10074;"; requestAnimationFrame(tick); });
+        vid.addEventListener("pause", function () { playB.innerHTML = "&#9654;"; ui(); });
+        vid.addEventListener("seeked", ui);
+        vid.addEventListener("ended", function () {
+          if (loopEl.checked && cur >= 0) { vid.currentTime = EPS[cur].video.start; vid.play(); } else ui();
+        });
+        playB.addEventListener("click", function () {
+          if (cur < 0) return;
+          if (vid.paused) {
+            if (vrel() >= vdur(cur) - 1.5 / FPS) vid.currentTime = EPS[cur].video.start;
+            vid.play();
+          } else vid.pause();
+        });
+        seekEl.addEventListener("input", function () {
+          if (cur < 0) return;
+          vid.currentTime = EPS[cur].video.start + seekEl.value / 1000 * vdur(cur);
+          ui();
+        });
+        grpSel.addEventListener("change", function () {
+          fillEps(grpSel.value);
+          if (epSel.options.length) load(parseInt(epSel.options[0].value, 10), 0);
+        });
+        epSel.addEventListener("change", function () { load(parseInt(epSel.value, 10), 0); });
+        sizeSel.addEventListener("click", function (ev) { ev.stopPropagation(); });
+        sizeSel.addEventListener("change", function () { vp.style.setProperty("--vw", sizeSel.value + "px"); });
+        document.getElementById("vp-head").addEventListener("click", function () {
+          vp.classList.toggle("collapsed");
+          togEl.innerHTML = vp.classList.contains("collapsed") ? "+" : "&minus;";
+        });
+        /* keep the Lines panel from running underneath this window */
+        if (window.ResizeObserver) new ResizeObserver(function () {
+          document.documentElement.style.setProperty("--vidh", (vp.offsetHeight + 12) + "px");
+          document.documentElement.style.setProperty("--vidw", (vp.offsetWidth + 12) + "px");
+        }).observe(vp);
+
+        /* click a line (or its start/end dot) in the plot to load that episode at that moment */
+        var traceToEp = {};
+        withVid.forEach(function (i) { EPS[i].traces.forEach(function (tr) { traceToEp[tr] = i; }); });
+        if (gd.on) gd.on("plotly_click", function (ev) {
+          var p = ev && ev.points && ev.points[0];
+          if (!p || traceToEp[p.curveNumber] === undefined) return;
+          var i = traceToEp[p.curveNumber], which = EPS[i].traces.indexOf(p.curveNumber);
+          var t = which === 0 ? p.pointNumber / FPS : (which === 1 ? 0 : vdur(i));
+          load(i, t);
+        });
+
+        if (groups.length) { grpSel.value = groups[0]; fillEps(groups[0]); }
+      }
+
+      /* ---------- joints-over-time graph ---------- */
+      /* Only active when the Python script included the panel (--joints given). Each episode entry then
+         carries q: one row per frame, one column per selected joint. Colors are per joint, line dashes
+         are per trajectory, so overlaid trajectories stay tellable apart. */
+      var jp = document.getElementById("jpanel");
+      if (jp && JNAMES.length) {
+        var jpPlot = document.getElementById("jp-plot"), jpEmpty = document.getElementById("jp-empty");
+        var jpOverlay = document.getElementById("jp-overlay"), jpTitle = document.getElementById("jp-title");
+        var jpTog = document.getElementById("jp-toggle");
+        var JCOL = ["#1f77b4", "#ff7f0e", "#2ca02c", "#d62728", "#9467bd", "#8c564b", "#e377c2", "#17becf"];
+        var JDASH = ["solid", "dash", "dot", "dashdot", "longdash", "longdashdot"];
+        var jDirty = false, jwarnTimer = null;
+        var jpWarn = document.getElementById("jp-warn");
+        /* yellow vertical line at the video's current time, same time step as the 3D dots */
+        var jT = null, jlBusy = false, jlNext = false;
+        function jLineShape() {
+          return {
+            type: "line", xref: "x", yref: "paper", x0: jT || 0, x1: jT || 0, y0: 0, y1: 1,
+            visible: jT !== null, layer: "above", line: { color: "#ffd400", width: 2.5 }
+          };
+        }
+        function drawJLine() {
+          if (jT === null || !jpPlot.data || jp.classList.contains("collapsed")) return;
+          if (jlBusy) { jlNext = true; return; }   /* one update at a time; the newest time wins */
+          jlBusy = true;
+          var done = function () { jlBusy = false; if (jlNext) { jlNext = false; drawJLine(); } };
+          var pr;
+          try {
+            pr = Plotly.relayout(jpPlot, { "shapes[0].x0": jT, "shapes[0].x1": jT, "shapes[0].visible": true });
+          } catch (err) { done(); return; }
+          if (pr && pr.then) pr.then(done, done); else done();
+        }
+        onTime = function (r) { jT = r; drawJLine(); };
+        var MAX_COMPARE = 2;     /* to allow more in overlay mode, see the commented-out lines in the click handler */
+        function warnJ(msg) {
+          clearTimeout(jwarnTimer);
+          jpWarn.textContent = msg;
+          jpWarn.style.display = msg ? "block" : "none";
+          if (msg) jwarnTimer = setTimeout(function () { warnJ(""); }, 5000);
+        }
+        function elabel(i) { return (EPS[i].group === "ref" ? "ref" : "run") + " ep" + EPS[i].ep; }
+
+        function renderJ() {
+          if (!jsel.length) {
+            jpTitle.textContent = "";
+            jpEmpty.style.display = "block"; jpPlot.style.display = "none";
+            if (jpPlot.data) Plotly.purge(jpPlot);
+            jDirty = false;
+            return;
+          }
+          jpTitle.textContent = "(" + (jsel.length <= 3 ? jsel.map(elabel).join(", ") : jsel.length + " trajectories") + ")";
+          if (jp.classList.contains("collapsed")) { jDirty = true; return; }   /* draw when shown again */
+          jDirty = false;
+          jpEmpty.style.display = "none"; jpPlot.style.display = "block";
+          var dark = mq.matches, fg = dark ? "#ececec" : "#1a1a1a", grid = dark ? "#3c424b" : "#d4d4d4";
+          var multi = jsel.length > 1, traces = [];
+          jsel.forEach(function (i, k) {
+            var e = EPS[i];
+            if (!e.q) return;
+            var T = e.q.length, t = new Array(T);
+            for (var f = 0; f < T; f++) t[f] = f / FPS;
+            JNAMES.forEach(function (n, j) {
+              var y = new Array(T);
+              for (var f2 = 0; f2 < T; f2++) y[f2] = e.q[f2][j];
+              traces.push({
+                type: "scattergl", mode: "lines", x: t, y: y,
+                name: (multi ? elabel(i) + " \u00b7 " : "") + n,
+                line: { color: JCOL[j % JCOL.length], width: 1.8, dash: JDASH[k % JDASH.length] },
+                hovertemplate: "%{fullData.name}<br>t = %{x:.3f} s<br>%{y:.1f}<extra></extra>"
+              });
+            });
+          });
+          var ax = { gridcolor: grid, zerolinecolor: grid, linecolor: grid, color: fg };
+          Plotly.react(jpPlot, traces, {
+            paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+            font: { color: fg, size: 11 }, margin: { l: 50, r: 8, t: 6, b: 40 }, autosize: true,
+            xaxis: Object.assign({ title: { text: "time (s)" } }, ax),
+            yaxis: Object.assign({ title: { text: "joint value" } }, ax),
+            /* legend sits lower (y = 0.8) so it stays clear of the reset / zoom controls at the top right */
+            legend: { font: { size: 10 }, bgcolor: "rgba(0,0,0,0)", x: 1.02, xanchor: "left", y: 0.8, yanchor: "top" },
+            showlegend: true,
+            shapes: [jLineShape()]
+          }, { responsive: true, displaylogo: false });
+        }
+
+        /* click a line (or its start/end dot) in the 3D plot: graph that trajectory */
+        var traceToAll = {};
+        EPS.forEach(function (e, i) { e.traces.forEach(function (tr) { traceToAll[tr] = i; }); });
+        if (gd.on) gd.on("plotly_click", function (ev) {
+          var p = ev && ev.points && ev.points[0];
+          if (!p || traceToAll[p.curveNumber] === undefined) return;
+          var i = traceToAll[p.curveNumber];
+          if (!EPS[i].q) return;
+          if (jpOverlay.checked) {
+            if (jsel.indexOf(i) < 0) {
+              if (jsel.length >= MAX_COMPARE) {        /* limit: two trajectories at once */
+                warnJ("Only " + MAX_COMPARE + " trajectories can be compared at once. " +
+                  "Click Clear, or turn off overlay mode, to pick another.");
+                return;
+              }
+              jsel.push(i);
+            }
+            /* Unlimited overlay: delete the limit check above and use this line instead
+            if (jsel.indexOf(i) < 0) jsel.push(i);
+            */
+          }
+          else jsel = [i];
+          warnJ("");
+          renderJ();
+          if (onVisChange) onVisChange();
+        });
+
+        document.getElementById("jp-clear").addEventListener("click", function (ev) {
+          ev.stopPropagation(); jsel = []; warnJ(""); renderJ();
+          if (onVisChange) onVisChange();
+        });
+        document.getElementById("jp-overlay").addEventListener("click", function (ev) { ev.stopPropagation(); });
+        jpOverlay.parentNode.addEventListener("click", function (ev) { ev.stopPropagation(); });
+        document.getElementById("jp-head").addEventListener("click", function () {
+          jp.classList.toggle("collapsed");
+          var hidden = jp.classList.contains("collapsed");
+          jpTog.innerHTML = hidden ? "+" : "&minus;";
+          if (hidden) return;
+          if (jDirty) renderJ(); else if (jpPlot.data) Plotly.Plots.resize(jpPlot);
+        });
+        if (mq.addEventListener) mq.addEventListener("change", function () { if (jsel.length) renderJ(); });
+        /* the panel's width changes with the video window size, which is not a window resize */
+        if (window.ResizeObserver) new ResizeObserver(function () {
+          if (jpPlot.data && !jp.classList.contains("collapsed")) Plotly.Plots.resize(jpPlot);
+        }).observe(jp);
+      }
+
+      render();
+    })();
+  </script>
+</body>
+
+</html>
